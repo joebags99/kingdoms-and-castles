@@ -233,67 +233,6 @@ const HexGrid: React.FC<HexGridProps> = ({
       coord => coord.q === hex.q && coord.r === coord.r && coord.s === coord.s
     );
   };
-
-  const getHexFillColor = (hex: HexData) => {
-    // Base colors by owner
-    const baseColors = {
-      player1: '#b3d9ff', // Light blue
-      player2: '#ffb3b3', // Light red
-      neutral: '#e6e6e6'  // Light gray
-    };
-    
-    // Resource hex colors - slightly brighter to indicate active resource generation
-    const resourceColors = {
-      player1: '#99ccff', // Brighter blue
-      player2: '#ff9999', // Brighter red
-    };
-    
-    // Check if this is a resource-generating hex
-    const isPlayer1Resource = isResourceHex(hex, 'player1');
-    const isPlayer2Resource = isResourceHex(hex, 'player2');
-    
-    // If it's a resource hex, use the resource color
-    if (isPlayer1Resource) {
-      return resourceColors.player1;
-    } else if (isPlayer2Resource) {
-      return resourceColors.player2;
-    }
-    
-    // Terrain modifiers
-    const terrainColors = {
-      plain: baseColors[hex.owner],
-      mountain: '#a6a6a6', // Gray
-      forest: '#99cc99',   // Green
-      river: '#80bfff',    // Blue
-      magic: '#d9b3ff'     // Purple
-    };
-    
-    // Capital placement phase - highlight valid placement positions
-    if (capitalPlacementPhase && validCapitalPlacements.some(pos => 
-      pos.q === hex.q && pos.r === hex.r && pos.s === hex.s
-    )) {
-      return currentPlayer === 'player1' ? '#7bb5ff' : '#ff7b7b'; // Brighter highlight
-    }
-    
-    // Highlight for selected unit hex
-    if (selectedUnitHex && hex.id === selectedUnitHex.id) {
-      return '#ffdd66'; // Golden highlight
-    }
-    
-    // Highlight for movement range
-    if (movementRange.includes(hex.id)) {
-      const baseColor = terrainColors[hex.terrain];
-      // Blend with light blue to indicate movement possibility
-      return hex.terrain === 'mountain' ? baseColor : '#cceeff';
-    }
-    
-    // If selected, highlight
-    if (selectedHex && hex.id === selectedHex.id) {
-      return '#ffff99'; // Yellow highlight for general selection
-    }
-    
-    return terrainColors[hex.terrain];
-  };
   
   // Check if a hex is valid for unit placement
   const isValidPlacement = (hex: HexData): boolean => {
@@ -348,6 +287,67 @@ const HexGrid: React.FC<HexGridProps> = ({
     });
     
     return validHexes;
+  };
+
+  const getHexFillColor = (hex: HexData) => {
+    // Base colors by owner
+    const baseColors = {
+      player1: '#b3d9ff', // Light blue
+      player2: '#ffb3b3', // Light red
+      neutral: '#e6e6e6'  // Light gray
+    };
+    
+    // Resource hex colors - slightly brighter to indicate active resource generation
+    const resourceColors = {
+      player1: '#99ccff', // Brighter blue
+      player2: '#ff9999', // Brighter red
+    };
+    
+    // Terrain modifiers - define this BEFORE using it
+    const terrainColors = {
+      plain: baseColors[hex.owner],
+      mountain: '#a6a6a6', // Gray
+      forest: '#99cc99',   // Green
+      river: '#80bfff',    // Blue
+      magic: '#d9b3ff'     // Purple
+    };
+    
+    // Check if this is a resource-generating hex
+    const isPlayer1Resource = isResourceHex(hex, 'player1');
+    const isPlayer2Resource = isResourceHex(hex, 'player2');
+    
+    // Capital placement phase - highlight valid placement positions
+    if (capitalPlacementPhase && validCapitalPlacements.some(pos => 
+      pos.q === hex.q && pos.r === hex.r && pos.s === hex.s
+    )) {
+      return currentPlayer === 'player1' ? '#7bb5ff' : '#ff7b7b'; // Brighter highlight
+    }
+    
+    // Highlight for selected unit hex
+    if (selectedUnitHex && hex.id === selectedUnitHex.id) {
+      return '#ffdd66'; // Golden highlight
+    }
+    
+    // Highlight for movement range
+    if (movementRange.includes(hex.id)) {
+      const baseColor = terrainColors[hex.terrain];
+      // Blend with light blue to indicate movement possibility
+      return hex.terrain === 'mountain' ? baseColor : '#cceeff';
+    }
+    
+    // If selected, highlight
+    if (selectedHex && hex.id === selectedHex.id) {
+      return '#ffff99'; // Yellow highlight for general selection
+    }
+    
+    // If it's a resource hex, use the resource color
+    if (isPlayer1Resource) {
+      return resourceColors.player1;
+    } else if (isPlayer2Resource) {
+      return resourceColors.player2;
+    }
+    
+    return terrainColors[hex.terrain];
   };
   
   const handleHexClick = (hex: HexData) => {

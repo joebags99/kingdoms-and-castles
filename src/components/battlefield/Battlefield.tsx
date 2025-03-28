@@ -220,7 +220,8 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
     ];
     
     // Number of hexes to unlock this round (capped at 6)
-    const hexesToUnlock = Math.min(round, 6);
+    // Starting from round 1, we should have at least 1 hex unlocked
+    const hexesToUnlock = Math.min(Math.max(round, 1), 6);
     
     // Add coordinates to the result
     for (let i = 0; i < hexesToUnlock; i++) {
@@ -229,9 +230,6 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
     
     return result;
   };
-  
-  // This function is no longer used since we're directly adding resources
-  // in the resource phase handling code
   
   // Process actions that happen during phase transitions
   const processPhaseTransition = (oldPhase: PhaseType, newPhase: PhaseType) => {
@@ -266,7 +264,8 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
     
     if (newPhase === 'RESOURCE') {
       // Resource generation - use round number
-      const currentRound = gameState.round;
+      // Ensure we're using at least round 1 for resource generation (even if round is 0)
+      const currentRound = Math.max(gameState.round, 1);
       
       // Only generate resources for the current player
       if (currentPlayerID === 'player1') {
@@ -283,7 +282,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
           player1: newResourceHexes
         }));
         
-        // Add resources based ONLY on the resource hexes (no base income)
+        // Add resources based on the resource hexes
         // Each resource hex generates 1 Faith
         if (newResourceHexes.length > 0) {
           if (!newResources.faith) newResources.faith = 0;
@@ -294,7 +293,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
         setPlayer1Resources(newResources);
         
         // Generate resource message for log
-        const resourcesGenerated = Math.min(currentRound, 6);
+        const resourcesGenerated = Math.min(Math.max(currentRound, 1), 6);
         
         // Update game state with new resources and log
         setGameState(prevState => {
@@ -327,7 +326,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
           player2: newResourceHexes
         }));
         
-        // Add resources based ONLY on the resource hexes (no base income)
+        // Add resources based on the resource hexes
         // Each resource hex generates 1 Blood
         if (newResourceHexes.length > 0) {
           if (!newResources.blood) newResources.blood = 0;
@@ -338,7 +337,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
         setPlayer2Resources(newResources);
         
         // Generate resource message for log
-        const resourcesGenerated = Math.min(currentRound, 6);
+        const resourcesGenerated = Math.min(Math.max(currentRound, 1), 6);
         
         // Update game state with new resources and log
         setGameState(prevState => {
