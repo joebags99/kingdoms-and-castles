@@ -1,17 +1,18 @@
 // src/components/battlefield/Battlefield.tsx
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import HexGrid from './HexGrid';
+import HexGrid, { HexData as HexGridHexData } from './HexGrid';
 import UnitSelectionPanel from '../units/UnitSelectionPanel';
 import PhaseController from '../phase/PhaseController';
 import ResourceDisplay from '../resources/ResourceDisplay';
 import { Unit, SAMPLE_UNITS } from '../../types/units';
 import { PhaseType, PHASES, getNextPhase } from '../../types/phases';
 import { 
-  ResourcePool, 
+  ResourcePool,
+  createEmptyResourcePool, 
   createStartingResourcePool, 
   addNaturalIncome,
-  addCapitalResourceGeneration
+  NATION_RESOURCES
 } from '../../types/resources';
 import {
   GameState,
@@ -81,30 +82,6 @@ const Instructions = styled.div`
   font-style: italic;
 `;
 
-// Helper function to get adjacent hexes (duplicated from resources.ts for simplicity)
-const getAdjacentHexes = (hexes: any[], centerHex: any): any[] => {
-  if (!centerHex) return [];
-  
-  const { q, r, s } = centerHex;
-  
-  // Adjacent hex coordinates relative to center
-  const adjacentCoords = [
-    {q: q+1, r: r-1, s: s}, // top right
-    {q: q+1, r: r, s: s-1}, // right
-    {q: q, r: r+1, s: s-1}, // bottom right
-    {q: q-1, r: r+1, s: s}, // bottom left
-    {q: q-1, r: r, s: s+1}, // left
-    {q: q, r: r-1, s: s+1}  // top left
-  ];
-  
-  // Find all hexes that match the adjacent coordinates
-  return hexes.filter(hex => 
-    adjacentCoords.some(coord => 
-      hex.q === coord.q && hex.r === coord.r && (hex.s === coord.s || hex.s === undefined)
-    )
-  );
-};
-
 const Button = styled.button`
   padding: 8px 16px;
   background-color: #4a6fa5;
@@ -152,16 +129,8 @@ const LogHeader = styled.h3`
   color: #333;
 `;
 
-// Define a type for hex data
-interface HexData {
-  id: string;
-  q: number;
-  r: number;
-  s: number;
-  terrain: string;
-  owner: PlayerID;
-  unit?: Unit;
-}
+// Define a type alias for hex data to match the HexGrid component
+type HexData = HexGridHexData;
 
 interface BattlefieldProps {
   width?: number;
@@ -176,8 +145,17 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
   // UI state
   const [hexes, setHexes] = useState<HexData[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
-  const [player1Resources, setPlayer1Resources] = useState<ResourcePool>(createStartingResourcePool('altaria'));
-  const [player2Resources, setPlayer2Resources] = useState<ResourcePool>(createStartingResourcePool('cartasia'));
+  const [player1Resources, setPlayer1Resources] = useState<ResourcePool>(createEmptyResourcePool());
+  const [player2Resources, setPlayer2Resources] = useState<ResourcePool>(createEmptyResourcePool());
+  
+  // Resource hex state
+  const [resourceHexes, setResourceHexes] = useState<{
+    player1: {q: number, r: number, s: number}[],
+    player2: {q: number, r: number, s: number}[]
+  }>({
+    player1: [],
+    player2: []
+  });
   
   // Capital placement state
   const [capitalPlacementPhase, setCapitalPlacementPhase] = useState<boolean>(false);
@@ -220,6 +198,41 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
     });
   };
   
+  // Calculate resource-generating hexes around a capital
+  const calculateResourceHexes = (
+    capitalHex: HexData | undefined,
+    round: number
+  ): {q: number, r: number, s: number}[] => {
+    const result: {q: number, r: number, s: number}[] = [];
+    
+    if (!capitalHex) return result;
+    
+    const { q, r, s } = capitalHex;
+    
+    // Define the 6 hexes around the capital in clockwise order starting from top
+    const adjacentCoords = [
+      {q: q, r: r-1, s: s+1},  // Top
+      {q: q+1, r: r-1, s: s},  // Top Right
+      {q: q+1, r: r, s: s-1},  // Bottom Right
+      {q: q, r: r+1, s: s-1},  // Bottom
+      {q: q-1, r: r+1, s: s},  // Bottom Left
+      {q: q-1, r: r, s: s+1}   // Top Left
+    ];
+    
+    // Number of hexes to unlock this round (capped at 6)
+    const hexesToUnlock = Math.min(round, 6);
+    
+    // Add coordinates to the result
+    for (let i = 0; i < hexesToUnlock; i++) {
+      result.push(adjacentCoords[i]);
+    }
+    
+    return result;
+  };
+  
+  // This function is no longer used since we're directly adding resources
+  // in the resource phase handling code
+  
   // Process actions that happen during phase transitions
   const processPhaseTransition = (oldPhase: PhaseType, newPhase: PhaseType) => {
     const currentPlayerID = gameState.currentPlayer;
@@ -252,87 +265,98 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
     }
     
     if (newPhase === 'RESOURCE') {
-      // Resource generation - use round number instead of turn
+      // Resource generation - use round number
       const currentRound = gameState.round;
       
-      // Only generate resources for the current player, not for both
+      // Only generate resources for the current player
       if (currentPlayerID === 'player1') {
-        // First add base nation income
-        let newResources = addNaturalIncome(player1Resources, 'altaria');
+        // Create a fresh copy of current resources
+        let newResources = { ...player1Resources };
         
-        // Then add resource generation based on round number
-        const capitalHex = gameState.players.player1.capitalHex;
-        if (capitalHex) {
-          newResources = addCapitalResourceGeneration(
-            newResources, 
-            'altaria', 
-            currentRound, 
-            hexes, 
-            capitalHex
-          );
-          
-          // Log the amount of resources generated
-          const resourcesGenerated = Math.min(currentRound, 6);
-          
-          setGameState(prevState => ({
-            ...prevState,
-            log: [...prevState.log, `Altaria generated ${resourcesGenerated} Faith based on round ${currentRound}`]
-          }));
+        // Calculate resource hexes
+        const capitalHex = gameState.players.player1.capitalHex as HexData | undefined;
+        const newResourceHexes = calculateResourceHexes(capitalHex, currentRound);
+        
+        // Update resource hexes for visualization
+        setResourceHexes(prev => ({
+          ...prev,
+          player1: newResourceHexes
+        }));
+        
+        // Add resources based ONLY on the resource hexes (no base income)
+        // Each resource hex generates 1 Faith
+        if (newResourceHexes.length > 0) {
+          if (!newResources.faith) newResources.faith = 0;
+          newResources.faith += newResourceHexes.length;
         }
         
-        // Only update the current player's resources
+        // Update player 1's resources
         setPlayer1Resources(newResources);
-      } else if (currentPlayerID === 'player2') {
-        // First add base nation income
-        let newResources = addNaturalIncome(player2Resources, 'cartasia');
         
-        // Then add resource generation based on round number
-        const capitalHex = gameState.players.player2.capitalHex;
-        if (capitalHex) {
-          newResources = addCapitalResourceGeneration(
-            newResources, 
-            'cartasia', 
-            currentRound, 
-            hexes, 
-            capitalHex
-          );
-          
-          // Log the amount of resources generated
-          const resourcesGenerated = Math.min(currentRound, 6);
-          
-          setGameState(prevState => ({
-            ...prevState,
-            log: [...prevState.log, `Cartasia generated ${resourcesGenerated} Blood based on round ${currentRound}`]
-          }));
-        }
+        // Generate resource message for log
+        const resourcesGenerated = Math.min(currentRound, 6);
         
-        // Only update the current player's resources
-        setPlayer2Resources(newResources);
-      }
-      
-      // Update game state - only for the current player
-      setGameState(prevState => {
-        const updatedPlayers = { ...prevState.players };
-        
-        // Make sure we're only updating the current player's resources
-        if (currentPlayerID === 'player1') {
+        // Update game state with new resources and log
+        setGameState(prevState => {
+          const updatedPlayers = { ...prevState.players };
           updatedPlayers.player1 = {
             ...updatedPlayers.player1,
-            resources: player1Resources
+            resources: newResources
           };
-        } else if (currentPlayerID === 'player2') {
-          updatedPlayers.player2 = {
-            ...updatedPlayers.player2,
-            resources: player2Resources
+          
+          return {
+            ...prevState,
+            players: updatedPlayers,
+            log: [...prevState.log, 
+              `Altaria generated ${resourcesGenerated} Faith from ${resourcesGenerated} unlocked hexes (Round ${currentRound})`
+            ]
           };
+        });
+      } 
+      else if (currentPlayerID === 'player2') {
+        // Create a fresh copy of current resources
+        let newResources = { ...player2Resources };
+        
+        // Calculate resource hexes
+        const capitalHex = gameState.players.player2.capitalHex as HexData | undefined;
+        const newResourceHexes = calculateResourceHexes(capitalHex, currentRound);
+        
+        // Update resource hexes for visualization
+        setResourceHexes(prev => ({
+          ...prev,
+          player2: newResourceHexes
+        }));
+        
+        // Add resources based ONLY on the resource hexes (no base income)
+        // Each resource hex generates 1 Blood
+        if (newResourceHexes.length > 0) {
+          if (!newResources.blood) newResources.blood = 0;
+          newResources.blood += newResourceHexes.length;
         }
         
-        return {
-          ...prevState,
-          players: updatedPlayers,
-          log: [...prevState.log, `${currentPlayerID === 'player1' ? 'Altaria' : 'Cartasia'} collected resources`]
-        };
-      });
+        // Update player 2's resources
+        setPlayer2Resources(newResources);
+        
+        // Generate resource message for log
+        const resourcesGenerated = Math.min(currentRound, 6);
+        
+        // Update game state with new resources and log
+        setGameState(prevState => {
+          const updatedPlayers = { ...prevState.players };
+          updatedPlayers.player2 = {
+            ...updatedPlayers.player2,
+            resources: newResources
+          };
+          
+          return {
+            ...prevState,
+            players: updatedPlayers,
+            log: [...prevState.log, 
+              `Cartasia generated ${resourcesGenerated} Blood from ${resourcesGenerated} unlocked hexes (Round ${currentRound})`
+            ]
+          };
+        });
+      }
     }
     
     if (newPhase === 'DRAW') {
@@ -441,12 +465,12 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
     
     // Check if all adjacent hexes are accessible (not mountains or occupied) AND owned by the player
     const adjacentCoords = [
-      {q: q+1, r: r-1, s: s}, // top right
-      {q: q+1, r: r, s: s-1}, // right
-      {q: q, r: r+1, s: s-1}, // bottom right
-      {q: q-1, r: r+1, s: s}, // bottom left
-      {q: q-1, r: r, s: s+1}, // left
-      {q: q, r: r-1, s: s+1}  // top left
+      {q: q, r: r-1, s: s+1},  // Top
+      {q: q+1, r: r-1, s: s},  // Top Right
+      {q: q+1, r: r, s: s-1},  // Bottom Right
+      {q: q, r: r+1, s: s-1},  // Bottom
+      {q: q-1, r: r+1, s: s},  // Bottom Left
+      {q: q-1, r: r, s: s+1}   // Top Left
     ];
     
     // All 6 adjacent hexes should be accessible and owned by the player
@@ -562,6 +586,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
       
       setGameState(prevState => ({
         ...prevState,
+        currentPlayer: 'player1', // Make sure player 1 goes first
         log: [...prevState.log, "Setup complete. Starting game with Altaria's turn"]
       }));
     }
@@ -581,7 +606,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
       case 'SETUP':
         return "Place your capital on a valid hex in your territory.";
       case 'RESOURCE':
-        return "Resources have been added to your pool based on your nation and buildings.";
+        return "Resources have been added to your pool based on your nation and unlocked hexes.";
       case 'DRAW':
         return "Draw a card from your deck.";
       case 'DEVELOPMENT_1':
@@ -602,8 +627,8 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
   // Load initial resources
   useEffect(() => {
     if (gameState.currentPhase === 'SETUP') {
-      setPlayer1Resources(createStartingResourcePool('altaria'));
-      setPlayer2Resources(createStartingResourcePool('cartasia'));
+      setPlayer1Resources(createEmptyResourcePool());
+      setPlayer2Resources(createEmptyResourcePool());
     }
   }, [gameState.currentPhase]);
   
@@ -654,6 +679,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
         onHexGridInit={handleHexGridInit}
         capitalPlacementPhase={capitalPlacementPhase}
         validCapitalPlacements={validCapitalPlacements}
+        resourceHexes={resourceHexes}
       />
       
       <ControlsContainer>
@@ -669,7 +695,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
             <div>
               <GameStatusText>
                 <strong>Current Turn:</strong> {getPlayerName(gameState.currentPlayer)} - 
-                Turn {gameState.turn}
+                Turn {gameState.turn}{gameState.round > 0 ? ` (Round ${gameState.round})` : ''}
               </GameStatusText>
               <Instructions>
                 {getCurrentPhaseInstructions()}

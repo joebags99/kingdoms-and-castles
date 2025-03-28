@@ -1,3 +1,4 @@
+// src/components/battlefield/HexGrid.tsx
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Unit } from '../../types/units';
@@ -14,15 +15,16 @@ const HexGridContainer = styled.div`
 `;
 
 // Define our hex types
-type TerrainType = 'plain' | 'mountain' | 'forest' | 'river' | 'magic';
+export type TerrainType = 'plain' | 'mountain' | 'forest' | 'river' | 'magic';
+export type PlayerID = 'player1' | 'player2' | 'neutral';
 
-interface HexData {
+export interface HexData {
   id: string;
   q: number;
   r: number;
   s: number;
   terrain: TerrainType;
-  owner: 'player1' | 'player2' | 'neutral';
+  owner: PlayerID;
   unit?: Unit; // Now can store the actual unit object
 }
 
@@ -30,7 +32,7 @@ interface HexGridProps {
   width?: number;
   height?: number;
   hexSize?: number;
-  currentPlayer: 'player1' | 'player2';
+  currentPlayer: PlayerID;
   selectedUnit: Unit | null;
   onUnitPlaced: (hex: HexData, unit: Unit) => void;
   initialCapitals?: { unit: Unit; position: { q: number; r: number; s?: number } }[];
@@ -39,6 +41,10 @@ interface HexGridProps {
   capitalPlacementPhase?: boolean;
   validCapitalPlacements?: {q: number, r: number, s: number}[];
   onHexInteraction?: (hex: HexData) => void;
+  resourceHexes?: {
+    player1: {q: number, r: number, s: number}[],
+    player2: {q: number, r: number, s: number}[]
+  };
 }
 
 // Helper function to generate the points for a hexagon
@@ -72,7 +78,8 @@ const HexGrid: React.FC<HexGridProps> = ({
   onHexGridInit,
   capitalPlacementPhase = false,
   validCapitalPlacements = [],
-  onHexInteraction
+  onHexInteraction,
+  resourceHexes
 }) => {
   // Generate initial hex grid data
   const generateHexData = (): HexData[] => {
@@ -87,7 +94,7 @@ const HexGrid: React.FC<HexGridProps> = ({
         const s = -q - r; // In hexagonal grid, q + r + s = 0
         
         // Determine hex owner based on position
-        let owner: 'player1' | 'player2' | 'neutral' = 'neutral';
+        let owner: PlayerID = 'neutral';
         if (r < -1) owner = 'player1';
         else if (r > 1) owner = 'player2';
         
@@ -214,6 +221,19 @@ const HexGrid: React.FC<HexGridProps> = ({
     }
   }, [capitalsPlaced, initialCapitals, hexes]);
 
+  // Check if a hex is a resource-generating hex
+  const isResourceHex = (hex: HexData, playerID: PlayerID): boolean => {
+    if (!resourceHexes) return false;
+    
+    const playerResourceHexes = playerID === 'player1' 
+      ? resourceHexes.player1 
+      : resourceHexes.player2;
+    
+    return playerResourceHexes.some(
+      coord => coord.q === hex.q && coord.r === coord.r && coord.s === coord.s
+    );
+  };
+
   const getHexFillColor = (hex: HexData) => {
     // Base colors by owner
     const baseColors = {
@@ -221,6 +241,23 @@ const HexGrid: React.FC<HexGridProps> = ({
       player2: '#ffb3b3', // Light red
       neutral: '#e6e6e6'  // Light gray
     };
+    
+    // Resource hex colors - slightly brighter to indicate active resource generation
+    const resourceColors = {
+      player1: '#99ccff', // Brighter blue
+      player2: '#ff9999', // Brighter red
+    };
+    
+    // Check if this is a resource-generating hex
+    const isPlayer1Resource = isResourceHex(hex, 'player1');
+    const isPlayer2Resource = isResourceHex(hex, 'player2');
+    
+    // If it's a resource hex, use the resource color
+    if (isPlayer1Resource) {
+      return resourceColors.player1;
+    } else if (isPlayer2Resource) {
+      return resourceColors.player2;
+    }
     
     // Terrain modifiers
     const terrainColors = {
@@ -315,7 +352,10 @@ const HexGrid: React.FC<HexGridProps> = ({
   
   const handleHexClick = (hex: HexData) => {
     setSelectedHex(hex);
-    console.log('Hex clicked:', hex);
+    
+    if (onHexInteraction) {
+      onHexInteraction(hex);
+    }
     
     // CASE 0: Capital placement phase
     if (capitalPlacementPhase && selectedUnit && selectedUnit.type === 'capital') {
@@ -435,6 +475,11 @@ const HexGrid: React.FC<HexGridProps> = ({
             pos.q === hex.q && pos.r === hex.r && pos.s === hex.s
           );
           
+          // Check if this is a resource-generating hex
+          const isPlayer1Resource = isResourceHex(hex, 'player1');
+          const isPlayer2Resource = isResourceHex(hex, 'player2');
+          const isResourceActiveHex = isPlayer1Resource || isPlayer2Resource;
+          
           // Determine stroke color and width
           let strokeColor = "#666";
           let strokeWidth = "0.5";
@@ -450,6 +495,9 @@ const HexGrid: React.FC<HexGridProps> = ({
             strokeWidth = "1.5";
           } else if (isValidPlacementHex) {
             strokeColor = "#00ff00";
+            strokeWidth = "1.5";
+          } else if (isResourceActiveHex) {
+            strokeColor = isPlayer1Resource ? "#5c94ff" : "#ff5c5c";
             strokeWidth = "1.5";
           }
           
@@ -521,6 +569,35 @@ const HexGrid: React.FC<HexGridProps> = ({
                   strokeWidth="1"
                   pointerEvents="none"
                 />
+              )}
+              
+              {/* Resource hex indicator */}
+              {isResourceActiveHex && (
+                <>
+                  <circle
+                    cx="0"
+                    cy="0"
+                    r={hexSize * 0.3}
+                    fill="none"
+                    stroke={isPlayer1Resource ? "#5c94ff" : "#ff5c5c"}
+                    strokeWidth="1.5"
+                    strokeDasharray="4 2"
+                    opacity="0.7"
+                    pointerEvents="none"
+                  />
+                  <text
+                    x="0"
+                    y="0"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={hexSize * 0.4}
+                    fill={isPlayer1Resource ? "#0066cc" : "#cc0000"}
+                    fontWeight="bold"
+                    pointerEvents="none"
+                  >
+                    {isPlayer1Resource ? "F" : "B"}
+                  </text>
+                </>
               )}
             </g>
           );
