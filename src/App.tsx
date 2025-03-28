@@ -1,25 +1,39 @@
 import React from 'react';
-import logo from './logo.svg';
 import './App.css';
+import Battlefield from './components/battlefield/Battlefield';
+import styled from 'styled-components';
+
+const AppContainer = styled.div`
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+`;
+
+const Header = styled.header`
+  text-align: center;
+  margin-bottom: 30px;
+`;
+
+const Title = styled.h1`
+  color: #2c3e50;
+  margin-bottom: 10px;
+`;
+
+const Subtitle = styled.p`
+  color: #7f8c8d;
+  font-size: 1.2rem;
+`;
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <AppContainer>
+      <Header>
+        <Title>Kingdoms & Castles</Title>
+        <Subtitle>A Tactical Card Game on a Hexagonal Battlefield</Subtitle>
+      </Header>
+      
+      <Battlefield width={13} height={9} hexSize={30} />
+    </AppContainer>
   );
 }
 
