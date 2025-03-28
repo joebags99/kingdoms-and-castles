@@ -113,6 +113,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width, height, hexSize }) => 
   const [player1CapitalPlaced, setPlayer1CapitalPlaced] = useState<boolean>(false);
   const [player2CapitalPlaced, setPlayer2CapitalPlaced] = useState<boolean>(false);
   const [validCapitalPlacements, setValidCapitalPlacements] = useState<{q: number, r: number, s: number}[]>([]);
+  const [currentCapitalToPlace, setCurrentCapitalToPlace] = useState<Unit | null>(null);
   
   // Access to the hex grid data
   const [hexes, setHexes] = useState<HexData[]>([]);
@@ -145,7 +146,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width, height, hexSize }) => 
   };
   
   // Check if a position is valid for capital placement
-  // (in player territory and all adjacent hexes are accessible)
+  // (in player territory and all adjacent hexes are accessible and owned by player)
   const isValidCapitalPosition = (q: number, r: number, s: number, playerOwner: 'player1' | 'player2'): boolean => {
     // Find the hex
     const centerHex = hexes.find(h => h.q === q && h.r === r && h.s === s);
@@ -154,7 +155,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width, height, hexSize }) => 
     // Check if in correct territory
     if (centerHex.owner !== playerOwner) return false;
     
-    // Check if all adjacent hexes are accessible (not mountains or occupied)
+    // Check if all adjacent hexes are accessible (not mountains or occupied) AND owned by the player
     const adjacentCoords = [
       {q: q+1, r: r-1, s: s}, // top right
       {q: q+1, r: r, s: s-1}, // right
@@ -164,52 +165,80 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width, height, hexSize }) => 
       {q: q, r: r-1, s: s+1}  // top left
     ];
     
-    // At least 4 of 6 adjacent hexes should be accessible
-    let accessibleCount = 0;
+    // All 6 adjacent hexes should be accessible and owned by the player
+    let validAdjacentCount = 0;
     
     for (const coord of adjacentCoords) {
       const adjHex = hexes.find(h => h.q === coord.q && h.r === coord.r && h.s === coord.s);
-      if (adjHex && adjHex.terrain !== 'mountain' && !adjHex.unit) {
-        accessibleCount++;
+      if (adjHex && 
+          adjHex.terrain !== 'mountain' && 
+          !adjHex.unit && 
+          adjHex.owner === playerOwner) {
+        validAdjacentCount++;
       }
     }
     
-    return accessibleCount >= 4;
+    return validAdjacentCount === 6;
   };
   
-  // Place capitals
+  // Start capital placement phase
   const handlePlaceCapitals = () => {
+    // Create capital units
     const altariaCapital = { ...SAMPLE_UNITS.altariaCapital, id: 'altaria_capital_' + Date.now() };
-    const cartasiaCapital = { ...SAMPLE_UNITS.cartasiaCapital, id: 'cartasia_capital_' + Date.now() };
     
-    // Find valid positions for capitals
-    // For Altaria (player1), we'll search in their territory
-    // For Cartasia (player2), we'll search in their territory
-    let player1CapitalPos = { q: -3, r: -3, s: 6 };
-    let player2CapitalPos = { q: 3, r: 3, s: -6 };
+    // Calculate valid placements for player 1 (Altaria)
+    const validPositions: {q: number, r: number, s: number}[] = [];
     
-    // If we have hexes data, search for valid positions
     if (hexes.length > 0) {
       hexes.forEach(hex => {
         if (hex.owner === 'player1' && isValidCapitalPosition(hex.q, hex.r, hex.s, 'player1')) {
-          player1CapitalPos = { q: hex.q, r: hex.r, s: hex.s };
-        } else if (hex.owner === 'player2' && isValidCapitalPosition(hex.q, hex.r, hex.s, 'player2')) {
-          player2CapitalPos = { q: hex.q, r: hex.r, s: hex.s };
+          validPositions.push({ q: hex.q, r: hex.r, s: hex.s });
         }
       });
     }
     
-    // Pass the capitals to HexGrid
-    const initialUnits = [
-      { unit: altariaCapital, position: player1CapitalPos },
-      { unit: cartasiaCapital, position: player2CapitalPos }
-    ];
+    // Set valid placement hexes
+    setValidCapitalPlacements(validPositions);
     
-    // Store initial units to be placed
-    setInitialCapitals(initialUnits);
-    setCapitalsPlaced(true);
+    // Start capital placement phase with player 1 (Altaria)
+    setCapitalPlacementPhase(true);
+    setCurrentPlayer('player1');
+    setCurrentCapitalToPlace(altariaCapital);
   };
   
+  // Handle when a capital is placed
+  const handleCapitalPlaced = (hex: any, capital: Unit) => {
+    if (currentPlayer === 'player1') {
+      // Set player 1's capital as placed
+      setPlayer1CapitalPlaced(true);
+      
+      // Switch to player 2 and prepare their capital placement
+      setCurrentPlayer('player2');
+      const cartasiaCapital = { ...SAMPLE_UNITS.cartasiaCapital, id: 'cartasia_capital_' + Date.now() };
+      setCurrentCapitalToPlace(cartasiaCapital);
+      
+      // Calculate valid placements for player 2 (Cartasia)
+      const validPositions: {q: number, r: number, s: number}[] = [];
+      
+      if (hexes.length > 0) {
+        hexes.forEach(hex => {
+          if (hex.owner === 'player2' && isValidCapitalPosition(hex.q, hex.r, hex.s, 'player2')) {
+            validPositions.push({ q: hex.q, r: hex.r, s: hex.s });
+          }
+        });
+      }
+      
+      setValidCapitalPlacements(validPositions);
+    } else {
+      // Both capitals have been placed
+      setPlayer2CapitalPlaced(true);
+      setCapitalPlacementPhase(false);
+      setValidCapitalPlacements([]);
+      setCurrentCapitalToPlace(null);
+      setCapitalsPlaced(true);
+    }
+  };
+
   return (
     <BattlefieldContainer>
       <BattlefieldHeader>
@@ -235,20 +264,33 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width, height, hexSize }) => 
         height={height} 
         hexSize={hexSize} 
         currentPlayer={currentPlayer}
-        selectedUnit={selectedUnit}
-        onUnitPlaced={handleUnitPlaced}
+        selectedUnit={capitalPlacementPhase ? currentCapitalToPlace : selectedUnit}
+        onUnitPlaced={capitalPlacementPhase ? handleCapitalPlaced : handleUnitPlaced}
         initialCapitals={initialCapitals}
         capitalsPlaced={capitalsPlaced}
         onHexGridInit={handleHexGridInit}
+        capitalPlacementPhase={capitalPlacementPhase}
+        validCapitalPlacements={validCapitalPlacements}
       />
       
       <ControlsContainer>
-        {!capitalsPlaced ? (
+        {!capitalPlacementPhase && !capitalsPlaced ? (
           <>
             <GameStatusText>Start the game by placing capitals</GameStatusText>
             <Button onClick={handlePlaceCapitals}>
-              Place Capitals
+              Start Capital Placement
             </Button>
+          </>
+        ) : capitalPlacementPhase ? (
+          <>
+            <div>
+              <GameStatusText>
+                <strong>{getPlayerName(currentPlayer)} Capital Placement</strong>
+              </GameStatusText>
+              <Instructions>
+                Click on a highlighted hex to place your capital. The capital must have all 6 surrounding hexes accessible.
+              </Instructions>
+            </div>
           </>
         ) : (
           <>
@@ -270,7 +312,7 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width, height, hexSize }) => 
         )}
       </ControlsContainer>
       
-      {capitalsPlaced && (
+      {capitalsPlaced && !capitalPlacementPhase && (
         <UnitSelectionPanel
           currentPlayer={currentPlayer}
           selectedUnit={selectedUnit}

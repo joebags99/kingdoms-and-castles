@@ -143,7 +143,7 @@ const HexGrid: React.FC<HexGridProps> = ({
   // Calculate building range around capitals
   const [buildingRange, setBuildingRange] = useState<{[hexId: string]: string}>({});
   
-  // Check if a hex is within building range of a capital (2 hexes)
+  // Check if a hex is within building range of a capital (1 hex)
   const isInBuildingRange = (hex: HexData): { inRange: boolean; color: string } => {
     // We'll calculate this dynamically based on the position of the capitals
     const capitalHexes = hexes.filter(h => h.unit?.type === 'capital');
@@ -158,18 +158,18 @@ const HexGrid: React.FC<HexGridProps> = ({
         Math.abs(hex.s - capitalHex.s)
       );
       
-      // If within 2 hexes of the capital
-      if (distance <= 2) {
+      // If within 1 hex of the capital (changed from 2)
+      if (distance <= 1) {
         // Color based on faction
         const colorMap: {[key: string]: string} = {
-          'altaria': 'rgba(238, 236, 230, 0.3)', // Cream
-          'cartasia': 'rgba(170, 0, 0, 0.2)',    // Deep red
-          'durandur': 'rgba(0, 128, 128, 0.2)',  // Teal
-          'belaklara': 'rgba(218, 165, 32, 0.2)', // Gold
-          'shadowspawn': 'rgba(72, 0, 72, 0.2)'  // Dark purple
+          'altaria': 'rgba(92, 148, 255, 0.3)', // Light blue
+          'cartasia': 'rgba(255, 92, 92, 0.3)',  // Light red
+          'durandur': 'rgba(0, 160, 160, 0.3)',  // Teal
+          'belaklara': 'rgba(218, 165, 32, 0.3)', // Gold
+          'shadowspawn': 'rgba(72, 0, 72, 0.3)'  // Dark purple
         };
         
-        const color = colorMap[capitalHex.unit.faction] || 'rgba(255, 255, 255, 0.1)';
+        const color = colorMap[capitalHex.unit.faction] || 'rgba(255, 255, 255, 0.2)';
         return { inRange: true, color };
       }
     }
@@ -230,6 +230,13 @@ const HexGrid: React.FC<HexGridProps> = ({
       river: '#80bfff',    // Blue
       magic: '#d9b3ff'     // Purple
     };
+    
+    // Capital placement phase - highlight valid placement positions
+    if (capitalPlacementPhase && validCapitalPlacements.some(pos => 
+      pos.q === hex.q && pos.r === hex.r && pos.s === hex.s
+    )) {
+      return currentPlayer === 'player1' ? '#7bb5ff' : '#ff7b7b'; // Brighter highlight
+    }
     
     // Highlight for selected unit hex
     if (selectedUnitHex && hex.id === selectedUnitHex.id) {
@@ -310,8 +317,30 @@ const HexGrid: React.FC<HexGridProps> = ({
     setSelectedHex(hex);
     console.log('Hex clicked:', hex);
     
+    // CASE 0: Capital placement phase
+    if (capitalPlacementPhase && selectedUnit && selectedUnit.type === 'capital') {
+      // Check if this is a valid hex for capital placement
+      const isValid = validCapitalPlacements.some(pos => 
+        pos.q === hex.q && pos.r === hex.r && pos.s === hex.s
+      );
+      
+      if (isValid) {
+        // Place the capital
+        const updatedHexes = hexes.map(h => {
+          if (h.id === hex.id) {
+            return { ...h, unit: { ...selectedUnit, id: selectedUnit.id + '_' + Date.now() } };
+          }
+          return h;
+        });
+        
+        setHexes(updatedHexes);
+        
+        // Notify parent component
+        onUnitPlaced(hex, selectedUnit);
+      }
+    }
     // CASE 1: If we have a unit from hand selected (placement mode)
-    if (selectedUnit && !selectedUnitHex && isValidPlacement(hex)) {
+    else if (selectedUnit && !selectedUnitHex && isValidPlacement(hex)) {
       // Place the unit on the hex
       const updatedHexes = hexes.map(h => {
         if (h.id === hex.id) {
@@ -401,12 +430,20 @@ const HexGrid: React.FC<HexGridProps> = ({
           const isSelectedUnitHex = selectedUnitHex && hex.id === selectedUnitHex.id;
           const isBuildingRangeHex = buildingRange[hex.id];
           
+          // Check if this hex is a valid capital placement position
+          const isValidCapitalHex = capitalPlacementPhase && validCapitalPlacements.some(pos => 
+            pos.q === hex.q && pos.r === hex.r && pos.s === hex.s
+          );
+          
           // Determine stroke color and width
           let strokeColor = "#666";
           let strokeWidth = "0.5";
           
           if (isSelectedUnitHex) {
             strokeColor = "#ff9900";
+            strokeWidth = "2";
+          } else if (isValidCapitalHex) {
+            strokeColor = currentPlayer === 'player1' ? "#0066ff" : "#ff0066";
             strokeWidth = "2";
           } else if (isValidMoveHex) {
             strokeColor = "#00aaff";
@@ -471,6 +508,19 @@ const HexGrid: React.FC<HexGridProps> = ({
                 >
                   <UnitIcon unit={hex.unit} />
                 </foreignObject>
+              )}
+              
+              {/* Visual indicator for valid capital placement */}
+              {isValidCapitalHex && (
+                <circle
+                  cx="0"
+                  cy="0"
+                  r={hexSize * 0.2}
+                  fill={currentPlayer === 'player1' ? 'rgba(0, 102, 255, 0.5)' : 'rgba(255, 0, 102, 0.5)'}
+                  stroke={currentPlayer === 'player1' ? '#0066ff' : '#ff0066'}
+                  strokeWidth="1"
+                  pointerEvents="none"
+                />
               )}
             </g>
           );
