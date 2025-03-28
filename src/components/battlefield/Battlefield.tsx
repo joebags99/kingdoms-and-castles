@@ -49,16 +49,16 @@ const GameInfo = styled.div`
   align-items: center;
 `;
 
-const PlayerInfo = styled.div<{ player: PlayerID; isActive: boolean }>`
+const PlayerInfo = styled.div<{ $player: PlayerID; $isActive: boolean }>`
   padding: 10px 15px;
   border-radius: 4px;
   background-color: ${props => 
-    props.player === 'player1' 
-      ? props.isActive ? '#b3d9ff' : '#d9e9ff'
-      : props.isActive ? '#ffb3b3' : '#ffdddd'
+    props.$player === 'player1' 
+      ? props.$isActive ? '#b3d9ff' : '#d9e9ff'
+      : props.$isActive ? '#ffb3b3' : '#ffdddd'
   };
-  font-weight: ${props => props.isActive ? 'bold' : 'normal'};
-  border: 2px solid ${props => props.isActive ? '#333' : 'transparent'};
+  font-weight: ${props => props.$isActive ? 'bold' : 'normal'};
+  border: 2px solid ${props => props.$isActive ? '#333' : 'transparent'};
 `;
 
 const ControlsContainer = styled.div`
@@ -186,11 +186,15 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
   
   // Access to the hex grid data
   const handleHexGridInit = (gridHexes: HexData[]) => {
-    setHexes(gridHexes);
-    setGameState(prevState => ({
-      ...prevState,
-      hexes: gridHexes as unknown as GameHexData[]
-    }));
+    // Only update state if the hexes array is empty (first initialization)
+    // or if the length has changed significantly
+    if (hexes.length === 0 || Math.abs(hexes.length - gridHexes.length) > 5) {
+      setHexes(gridHexes);
+      setGameState(prevState => ({
+        ...prevState,
+        hexes: gridHexes as unknown as GameHexData[]
+      }));
+    }
   };
   
   // Handle phase changes
@@ -222,81 +226,106 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
     
     if (oldPhase === 'END' && newPhase === 'RESOURCE') {
       // Start of a new turn
+      const nextPlayer = currentPlayerID === 'player1' ? 'player2' : 'player1';
+      
+      // If we're going from player2 back to player1, increment the round counter
+      const isNewRound = currentPlayerID === 'player2';
+      const nextRound = isNewRound ? gameState.round + 1 : gameState.round;
+      
       setGameState(prevState => ({
         ...prevState,
         turn: prevState.turn + 1,
-        currentPlayer: prevState.currentPlayer === 'player1' ? 'player2' : 'player1',
-        log: [...prevState.log, `Turn ${prevState.turn + 1} begins`]
+        round: nextRound,
+        currentPlayer: nextPlayer,
+        log: [...prevState.log, `Turn ${prevState.turn + 1} begins${isNewRound ? ` (Round ${nextRound})` : ''}`]
+      }));
+    }
+    
+    // Special case for transitioning from SETUP to RESOURCE - initialize first real turn
+    if (oldPhase === 'SETUP' && newPhase === 'RESOURCE') {
+      setGameState(prevState => ({
+        ...prevState,
+        turn: 1, // First real turn starts now
+        round: 1, // First round starts now
+        log: [...prevState.log, `Game begins with Round 1`]
       }));
     }
     
     if (newPhase === 'RESOURCE') {
-      // Resource generation
+      // Resource generation - use round number instead of turn
+      const currentRound = gameState.round;
+      
+      // Only generate resources for the current player, not for both
       if (currentPlayerID === 'player1') {
         // First add base nation income
         let newResources = addNaturalIncome(player1Resources, 'altaria');
         
-        // Then add resource generation from capital's surrounding hexes
+        // Then add resource generation based on round number
         const capitalHex = gameState.players.player1.capitalHex;
         if (capitalHex) {
           newResources = addCapitalResourceGeneration(
             newResources, 
             'altaria', 
-            gameState.turn, 
+            currentRound, 
             hexes, 
             capitalHex
           );
           
-          // Get count of generating hexes (up to turn number or 6, whichever is smaller)
-          const maxGeneratingHexes = Math.min(gameState.turn, 6);
-          const emptyAdjacentHexes = getAdjacentHexes(hexes, capitalHex).filter(hex => !hex.building);
-          const actualGeneratingHexes = Math.min(emptyAdjacentHexes.length, maxGeneratingHexes);
+          // Log the amount of resources generated
+          const resourcesGenerated = Math.min(currentRound, 6);
           
-          // Add to game log
           setGameState(prevState => ({
             ...prevState,
-            log: [...prevState.log, `Altaria generated ${actualGeneratingHexes} Faith from ${actualGeneratingHexes} empty hexes around capital`]
+            log: [...prevState.log, `Altaria generated ${resourcesGenerated} Faith based on round ${currentRound}`]
           }));
         }
         
+        // Only update the current player's resources
         setPlayer1Resources(newResources);
-      } else {
+      } else if (currentPlayerID === 'player2') {
         // First add base nation income
         let newResources = addNaturalIncome(player2Resources, 'cartasia');
         
-        // Then add resource generation from capital's surrounding hexes
+        // Then add resource generation based on round number
         const capitalHex = gameState.players.player2.capitalHex;
         if (capitalHex) {
           newResources = addCapitalResourceGeneration(
             newResources, 
             'cartasia', 
-            gameState.turn, 
+            currentRound, 
             hexes, 
             capitalHex
           );
           
-          // Get count of generating hexes (up to turn number or 6, whichever is smaller)
-          const maxGeneratingHexes = Math.min(gameState.turn, 6);
-          const emptyAdjacentHexes = getAdjacentHexes(hexes, capitalHex).filter(hex => !hex.building);
-          const actualGeneratingHexes = Math.min(emptyAdjacentHexes.length, maxGeneratingHexes);
+          // Log the amount of resources generated
+          const resourcesGenerated = Math.min(currentRound, 6);
           
-          // Add to game log
           setGameState(prevState => ({
             ...prevState,
-            log: [...prevState.log, `Cartasia generated ${actualGeneratingHexes} Blood from ${actualGeneratingHexes} empty hexes around capital`]
+            log: [...prevState.log, `Cartasia generated ${resourcesGenerated} Blood based on round ${currentRound}`]
           }));
         }
         
+        // Only update the current player's resources
         setPlayer2Resources(newResources);
       }
       
-      // Update game state
+      // Update game state - only for the current player
       setGameState(prevState => {
         const updatedPlayers = { ...prevState.players };
-        updatedPlayers[currentPlayerID] = {
-          ...updatedPlayers[currentPlayerID],
-          resources: currentPlayerID === 'player1' ? player1Resources : player2Resources
-        };
+        
+        // Make sure we're only updating the current player's resources
+        if (currentPlayerID === 'player1') {
+          updatedPlayers.player1 = {
+            ...updatedPlayers.player1,
+            resources: player1Resources
+          };
+        } else if (currentPlayerID === 'player2') {
+          updatedPlayers.player2 = {
+            ...updatedPlayers.player2,
+            resources: player2Resources
+          };
+        }
         
         return {
           ...prevState,
@@ -584,14 +613,14 @@ const Battlefield: React.FC<BattlefieldProps> = ({ width = 13, height = 9, hexSi
         <BattlefieldTitle>Kingdoms & Castles</BattlefieldTitle>
         <GameInfo>
           <PlayerInfo 
-            player="player1" 
-            isActive={gameState.currentPlayer === 'player1'}
+            $player="player1" 
+            $isActive={gameState.currentPlayer === 'player1'}
           >
             Player 1: Altaria
           </PlayerInfo>
           <PlayerInfo 
-            player="player2" 
-            isActive={gameState.currentPlayer === 'player2'}
+            $player="player2" 
+            $isActive={gameState.currentPlayer === 'player2'}
           >
             Player 2: Cartasia
           </PlayerInfo>

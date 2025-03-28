@@ -14,20 +14,20 @@ const ResourceDisplayContainer = styled.div`
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 `;
 
-const ResourceItem = styled.div<{ color: string; active: boolean }>`
+const ResourceItem = styled.div<{ $color: string; $active: boolean }>`
   display: flex;
   align-items: center;
-  background-color: ${props => props.active ? '#ffffff' : '#f1f3f5'};
+  background-color: ${props => props.$active ? '#ffffff' : '#f1f3f5'};
   border-radius: 6px;
   padding: 8px;
   min-width: 80px;
-  border: 2px solid ${props => props.active ? props.color : 'transparent'};
-  opacity: ${props => props.active ? '1' : '0.6'};
+  border: 2px solid ${props => props.$active ? props.$color : 'transparent'};
+  opacity: ${props => props.$active ? '1' : '0.6'};
   transition: all 0.2s;
   
   &:hover {
-    transform: ${props => props.active ? 'translateY(-2px)' : 'none'};
-    box-shadow: ${props => props.active ? '0 4px 8px rgba(0,0,0,0.1)' : 'none'};
+    transform: ${props => props.$active ? 'translateY(-2px)' : 'none'};
+    box-shadow: ${props => props.$active ? '0 4px 8px rgba(0,0,0,0.1)' : 'none'};
   }
 `;
 
@@ -81,8 +81,8 @@ const ResourceDisplay: React.FC<ResourceDisplayProps> = ({ resources, nation }) 
         return (
           <ResourceItem 
             key={resourceType} 
-            color={resource.color}
-            active={isActive}
+            $color={resource.color}
+            $active={isActive}
             title={`${resource.name}: ${resource.description}`}
           >
             <ResourceIcon color={resource.color}>

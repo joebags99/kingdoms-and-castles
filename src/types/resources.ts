@@ -113,7 +113,7 @@ export const addNaturalIncome = (pool: ResourcePool, nation: string): ResourcePo
 export const addCapitalResourceGeneration = (
   pool: ResourcePool, 
   nation: string, 
-  turn: number,
+  round: number,  // Changed from turn to round
   hexes: any[], 
   capitalHex: any
 ): ResourcePool => {
@@ -134,14 +134,17 @@ export const addCapitalResourceGeneration = (
   // Count empty adjacent hexes (no buildings)
   const emptyAdjacentHexes = adjacentHexes.filter(hex => !hex.building);
   
-  // Calculate resource generation - 1 per empty hex, capped by current turn number
-  // This means turn 1 = max 1 resource, turn 2 = max 2... up to turn 6 and beyond = max 6
-  const resourceGenerationPerHex = 1;
-  const maxHexesGenerating = Math.min(emptyAdjacentHexes.length, Math.min(turn, 6));
-  const totalResourceGeneration = resourceGenerationPerHex * maxHexesGenerating;
+  // Calculate resource generation - based on round, not turn
+  // Round 1 = 1 resource, Round 2 = 2 resources, up to Round 6 = 6 resources
+  const resourceAmount = Math.min(round, 6);
+  
+  // Ensure we don't exceed maximum resource cap of 20
+  const currentResources = newPool[primaryResource];
+  const maxPossibleGain = 20 - currentResources;
+  const actualResourceGain = Math.min(resourceAmount, maxPossibleGain);
   
   // Add generated resources to the pool
-  newPool[primaryResource] += totalResourceGeneration;
+  newPool[primaryResource] += actualResourceGain;
   
   return newPool;
 };

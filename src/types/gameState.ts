@@ -72,16 +72,17 @@ export interface PlayerState {
 
 // Game state interface
 export interface GameState {
-  players: Record<PlayerID, PlayerState>;
-  currentPlayer: PlayerID;
-  currentPhase: PhaseType;
-  turn: number;
-  hexes: HexData[];
-  lastAction: string;
-  gameOver: boolean;
-  winner: PlayerID | null;
-  log: string[];
-}
+    players: Record<PlayerID, PlayerState>;
+    currentPlayer: PlayerID;
+    currentPhase: PhaseType;
+    turn: number;
+    round: number; // Add this line to track game rounds
+    hexes: HexData[];
+    lastAction: string;
+    gameOver: boolean;
+    winner: PlayerID | null;
+    log: string[];
+  }
 
 // Create an initial player state
 export const createInitialPlayerState = (
@@ -105,22 +106,23 @@ export const createInitialPlayerState = (
 
 // Create initial game state
 export const createInitialGameState = (): GameState => {
-  return {
-    players: {
-      player1: createInitialPlayerState('player1', 'altaria'),
-      player2: createInitialPlayerState('player2', 'cartasia'),
-      neutral: createInitialPlayerState('neutral', 'altaria') // Placeholder for neutral "player"
-    },
-    currentPlayer: 'player1',
-    currentPhase: 'SETUP',
-    turn: 1,
-    hexes: [],
-    lastAction: 'Game started',
-    gameOver: false,
-    winner: null,
-    log: ['Game initialized']
+    return {
+      players: {
+        player1: createInitialPlayerState('player1', 'altaria'),
+        player2: createInitialPlayerState('player2', 'cartasia'),
+        neutral: createInitialPlayerState('neutral', 'altaria') // Placeholder for neutral "player"
+      },
+      currentPlayer: 'player1',
+      currentPhase: 'SETUP',
+      turn: 0, // Starting at 0 since SETUP doesn't count as a turn
+      round: 0, // Starting at 0 since SETUP doesn't count as a round
+      hexes: [],
+      lastAction: 'Game started',
+      gameOver: false,
+      winner: null,
+      log: ['Game initialized']
+    };
   };
-};
 
 // Check if a player can perform an action based on the current phase
 export const canPerformAction = (
